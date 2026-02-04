@@ -15,11 +15,63 @@ use crossterm::{
     },
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use viuer::{print_from_file, Config as ViuConfig};
 
 #[derive(Clone, Copy)]
 struct Link {
     label: &'static str,
     url: &'static str,
+}
+
+fn render_gallery_preview(
+    stdout: &mut Stdout,
+    state: &mut AppState,
+    post: &Post,
+    content_x: u16,
+    content_y: u16,
+    content_width: usize,
+    rows: u16,
+) -> io::Result<()> {
+    let path = Path::new(&post.url);
+    if !path.is_file() {
+        queue!(
+            stdout,
+            MoveTo(content_x, content_y),
+            SetForegroundColor(Color::DarkGrey),
+            Print("Image not found."),
+            ResetColor
+        )?;
+        return Ok(());
+    }
+
+    let available = rows.saturating_sub(content_y + 2) as u32;
+    if content_width == 0 || available == 0 {
+        return Ok(());
+    }
+
+    stdout.flush()?;
+    let config = ViuConfig {
+        x: content_x,
+        y: content_y as i16,
+        width: Some(content_width as u32),
+        height: Some(available),
+        transparent: true,
+        restore_cursor: true,
+        ..Default::default()
+    };
+
+    if let Err(err) = print_from_file(path, &config) {
+        state.status = Some(format!("Image preview failed ({})", err));
+        queue!(
+            stdout,
+            MoveTo(content_x, content_y),
+            SetForegroundColor(Color::DarkGrey),
+            Print("Image preview unavailable."),
+            ResetColor
+        )?;
+    }
+
+    Ok(())
 }
 
 struct AboutData {
@@ -315,11 +367,12 @@ fn render(stdout: &mut Stdout, data: &AppData, state: &mut AppState) -> io::Resu
     let max_width = cols.saturating_sub(4) as usize;
     queue!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
 
+    let (header_title, header_subtitle) = header_text(data, state);
     queue!(
         stdout,
         MoveTo(2, 1),
         SetAttribute(Attribute::Bold),
-        Print(&data.header.title),
+        Print(header_title),
         SetAttribute(Attribute::Reset)
     )?;
 
@@ -327,7 +380,7 @@ fn render(stdout: &mut Stdout, data: &AppData, state: &mut AppState) -> io::Resu
         stdout,
         MoveTo(2, 2),
         SetForegroundColor(Color::DarkGrey),
-        Print(&data.header.subtitle),
+        Print(header_subtitle),
         ResetColor
     )?;
 
@@ -447,19 +500,8 @@ fn render_content_tab(
     rows: u16,
     content_top: u16,
 ) -> io::Result<()> {
-    queue!(
-        stdout,
-        MoveTo(2, content_top),
-        SetAttribute(Attribute::Bold),
-        Print(tab.name),
-        SetAttribute(Attribute::Reset)
-    )?;
-
-    let description = clamp_text(tab.description, max_width);
-    queue!(stdout, MoveTo(2, content_top + 1), Print(description))?;
-
     let list_x = 2;
-    let list_y = content_top + 3;
+    let list_y = content_top + 1;
     let list_width = ((max_width as f32) * 0.33) as usize;
     let list_width = list_width.clamp(24, 38);
     let list_height = rows.saturating_sub(list_y + 3) as usize;
@@ -525,46 +567,60 @@ fn render_content_tab(
     let content_width = max_width.saturating_sub(content_x as usize + 1).max(10);
 
     if let Some(post) = tab.posts.get(state.list_index) {
-        let content_top = list_y - 1;
-        let mut y = content_top;
+        if is_gallery_tab(tab) {
+            state.content_scroll = 0;
+            state.content_scroll_max = 0;
+            render_gallery_preview(
+                stdout,
+                state,
+                post,
+                content_x,
+                list_y - 1,
+                content_width,
+                rows,
+            )?;
+        } else {
+            let content_top = list_y - 1;
+            let mut y = content_top;
 
-        let title = clamp_text(&post.title, content_width);
-        queue!(
-            stdout,
-            MoveTo(content_x, y),
-            SetAttribute(Attribute::Bold),
-            Print(title),
-            SetAttribute(Attribute::Reset)
-        )?;
-        y += 1;
-
-        if !post.date.is_empty() {
+            let title = clamp_text(&post.title, content_width);
             queue!(
                 stdout,
                 MoveTo(content_x, y),
-                SetForegroundColor(Color::DarkGrey),
-                Print(post.date.clone()),
-                ResetColor
+                SetAttribute(Attribute::Bold),
+                Print(title),
+                SetAttribute(Attribute::Reset)
             )?;
             y += 1;
-        }
 
-        let lines = wrap_markdown(&post.body, content_width);
-        let available = rows.saturating_sub(y + 2) as usize;
-        state.content_scroll_max = lines.len().saturating_sub(available);
-        if state.content_scroll > state.content_scroll_max {
-            state.content_scroll = state.content_scroll_max;
-        }
+            if !post.date.is_empty() {
+                queue!(
+                    stdout,
+                    MoveTo(content_x, y),
+                    SetForegroundColor(Color::DarkGrey),
+                    Print(post.date.clone()),
+                    ResetColor
+                )?;
+                y += 1;
+            }
 
-        for line in lines.iter().skip(state.content_scroll).take(available) {
-            queue!(
-                stdout,
-                MoveTo(content_x, y),
-                Print(clamp_text(line, content_width))
-            )?;
-            y += 1;
-            if y >= rows.saturating_sub(2) {
-                break;
+            let lines = wrap_markdown(&post.body, content_width);
+            let available = rows.saturating_sub(y + 2) as usize;
+            state.content_scroll_max = lines.len().saturating_sub(available);
+            if state.content_scroll > state.content_scroll_max {
+                state.content_scroll = state.content_scroll_max;
+            }
+
+            for line in lines.iter().skip(state.content_scroll).take(available) {
+                queue!(
+                    stdout,
+                    MoveTo(content_x, y),
+                    Print(clamp_text(line, content_width))
+                )?;
+                y += 1;
+                if y >= rows.saturating_sub(2) {
+                    break;
+                }
             }
         }
     } else {
@@ -606,6 +662,15 @@ fn tab_name(tab: &TabData) -> &'static str {
     match tab {
         TabData::About(_) => "About",
         TabData::Content(tab) => tab.name,
+    }
+}
+fn is_gallery_tab(tab: &ContentTab) -> bool {
+    tab.name == "Gallery"
+}
+fn header_text<'a>(data: &'a AppData, state: &AppState) -> (&'a str, &'a str) {
+    match data.tabs.get(state.tab_index) {
+        Some(TabData::Content(tab)) => (tab.name, tab.description),
+        Some(TabData::About(_)) | None => (&data.header.title, &data.header.subtitle),
     }
 }
 

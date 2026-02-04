@@ -6,3 +6,4 @@ license = "MIT"
 
 [dependencies]
 crossterm = "0.28"
+viuer = { version = "0.11", features = ["print-file"] }
