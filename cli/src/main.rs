@@ -23,6 +23,99 @@ struct Link {
     url: &'static str,
 }
 
+fn ensure_remote_content(status: &mut Option<String>) -> Option<PathBuf> {
+    let repo_dir = content_cache_dir()?;
+    if !git_available() {
+        status.get_or_insert_with(|| {
+            "Git not found. Install git or set JOHNJEONG_CONTENT_DIR to your content path."
+                .to_string()
+        });
+        return None;
+    }
+
+    if repo_dir.is_dir() {
+        if repo_dir.join(".git").is_dir() {
+            if let Err(message) = git_pull(&repo_dir) {
+                status.get_or_insert_with(|| format!("Failed to update content ({})", message));
+            }
+        }
+        return Some(repo_dir);
+    }
+
+    if let Some(parent) = repo_dir.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            status.get_or_insert_with(|| "Failed to create cache directory.".to_string());
+            return None;
+        }
+    }
+
+    match git_clone(&repo_dir) {
+        Ok(()) => Some(repo_dir),
+        Err(message) => {
+            status.get_or_insert_with(|| format!("Failed to fetch content ({})", message));
+            None
+        }
+    }
+}
+
+fn content_cache_dir() -> Option<PathBuf> {
+    if let Ok(path) = env::var("XDG_CACHE_HOME") {
+        return Some(
+            PathBuf::from(path)
+                .join("johnjeong")
+                .join("part-of-my-brain"),
+        );
+    }
+    if let Ok(home) = env::var("HOME") {
+        let cache_root = PathBuf::from(&home).join("Library").join("Caches");
+        if cache_root.is_dir() {
+            return Some(cache_root.join("johnjeong").join("part-of-my-brain"));
+        }
+        return Some(
+            PathBuf::from(home)
+                .join(".cache")
+                .join("johnjeong")
+                .join("part-of-my-brain"),
+        );
+    }
+    None
+}
+
+fn git_available() -> bool {
+    Command::new("git").arg("--version").output().is_ok()
+}
+
+fn git_pull(repo_dir: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_dir)
+        .arg("pull")
+        .arg("--ff-only")
+        .output()
+        .map_err(|err| err.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+fn git_clone(repo_dir: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg(CONTENT_REPO_URL)
+        .arg(repo_dir)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 fn render_gallery_preview(
     stdout: &mut Stdout,
     state: &mut AppState,
@@ -135,6 +228,7 @@ const ABOUT_LINKS: [Link; 4] = [
         url: "mailto:john@hyprnote.com",
     },
 ];
+const CONTENT_REPO_URL: &str = "https://github.com/ComputelessComputer/part-of-my-brain";
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -171,18 +265,18 @@ fn main() -> io::Result<()> {
 
 fn build_app_data() -> (AppData, Option<String>) {
     let header = load_header_data();
-    let content_root = resolve_content_root();
     let mut status = None;
+    let content_root = resolve_content_root(&mut status);
 
     let essays = content_root
         .as_ref()
         .map(|root| root.join("essays"))
         .and_then(|dir| load_posts(&dir, "https://johnjeong.com/essays", true).ok())
         .unwrap_or_else(|| {
-            status = Some(
-        "Content directory not found. Set JOHNJEONG_CONTENT_DIR to your part-of-my-brain path."
-          .to_string(),
-      );
+            status.get_or_insert_with(|| {
+                "Content directory not found. Set JOHNJEONG_CONTENT_DIR or install git to fetch content."
+                    .to_string()
+            });
             Vec::new()
         });
 
@@ -678,7 +772,7 @@ fn tab_label(index: usize, tab: &TabData) -> String {
     format!("{}. {}", index + 1, tab_name(tab))
 }
 
-fn resolve_content_root() -> Option<PathBuf> {
+fn resolve_content_root(status: &mut Option<String>) -> Option<PathBuf> {
     if let Ok(path) = env::var("JOHNJEONG_CONTENT_DIR") {
         let candidate = PathBuf::from(path);
         if candidate.is_dir() {
@@ -696,7 +790,7 @@ fn resolve_content_root() -> Option<PathBuf> {
             break;
         }
     }
-    None
+    ensure_remote_content(status)
 }
 
 fn load_header_data() -> HeaderData {
@@ -1055,4 +1149,5 @@ fn print_help() {
     println!();
     println!("Content:");
     println!("  Set JOHNJEONG_CONTENT_DIR to a part-of-my-brain directory.");
+    println!("  If missing, content is fetched from GitHub (requires git).");
 }

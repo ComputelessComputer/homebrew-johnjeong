@@ -3,7 +3,7 @@
 Terminal edition of the site, built with `crossterm`.
 
 It reads local content from the `part-of-my-brain` repo. Set `JOHNJEONG_CONTENT_DIR` if you want
-to point at a custom location.
+to point at a custom location. If content is missing, it will fetch from GitHub (requires `git`).
 
 ## Run locally
 

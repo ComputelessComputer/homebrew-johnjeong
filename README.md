@@ -19,4 +19,6 @@ To point at a custom content directory:
 
 ```sh
 JOHNJEONG_CONTENT_DIR=/path/to/part-of-my-brain johnjeong
+
+If content is missing, it will fetch from GitHub (requires `git`).
 ```
