@@ -376,11 +376,11 @@ fn render_nav(stdout: &mut Stdout, data: &AppData, state: &AppState, y: u16) -> 
             queue!(
                 stdout,
                 SetAttribute(Attribute::Underlined),
-                Print(label),
+                Print(&label),
                 SetAttribute(Attribute::Reset)
             )?;
         } else {
-            queue!(stdout, Print(label))?;
+            queue!(stdout, Print(&label))?;
         }
         x += label.len() as u16 + 3;
     }
