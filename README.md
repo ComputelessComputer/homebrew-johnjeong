@@ -5,8 +5,8 @@ Homebrew tap for `johnjeong` formulae.
 ## Install
 
 ```sh
-brew tap johnjeong/johnjeong
-brew install johnjeong/johnjeong/johnjeong
+brew tap ComputelessComputer/johnjeong
+brew install ComputelessComputer/johnjeong/johnjeong
 ```
 
 ## Run
