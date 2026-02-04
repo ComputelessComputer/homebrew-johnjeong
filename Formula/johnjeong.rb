@@ -1,9 +1,10 @@
 class Johnjeong < Formula
   desc "Terminal edition of johnjeong.com"
   homepage "https://johnjeong.com"
-  url "https://github.com/ComputelessComputer/homebrew-johnjeong/archive/refs/tags/v0.1.2.tar.gz"
-  sha256 "3ae884eafbb04d12059935d8329f312ca0b946c070136ece012d91fd6b118ef9"
+  url "https://github.com/ComputelessComputer/homebrew-johnjeong/archive/refs/tags/v0.1.3.tar.gz"
+  sha256 "deba0e4e2429e928346ce8cd502a01c9cfb2514d5277a01a67e9b2220b0a995d"
   license "MIT"
+  depends_on "git"
 
   depends_on "rust" => :build
 
