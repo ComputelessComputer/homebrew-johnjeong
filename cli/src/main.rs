@@ -280,12 +280,6 @@ fn build_app_data() -> (AppData, Option<String>) {
             Vec::new()
         });
 
-    let journals = content_root
-        .as_ref()
-        .map(|root| root.join("journals"))
-        .and_then(|dir| load_posts(&dir, "https://johnjeong.com/journals", false).ok())
-        .unwrap_or_default();
-
     let inspirations = content_root
         .as_ref()
         .map(|root| root.join("inspirations"))
@@ -313,11 +307,6 @@ fn build_app_data() -> (AppData, Option<String>) {
             name: "Essays",
             description: "Long-form writing.",
             posts: essays,
-        }),
-        TabData::Content(ContentTab {
-            name: "Daily Logs",
-            description: "Daily notes and logs.",
-            posts: journals,
         }),
         TabData::Content(ContentTab {
             name: "Inspirations",
@@ -376,8 +365,7 @@ fn handle_key(key: KeyEvent, data: &AppData, state: &mut AppState) -> io::Result
         KeyCode::Char('3') => switch_tab(state, 2, data.tabs.len()),
         KeyCode::Char('4') => switch_tab(state, 3, data.tabs.len()),
         KeyCode::Char('5') => switch_tab(state, 4, data.tabs.len()),
-        KeyCode::Char('6') => switch_tab(state, 5, data.tabs.len()),
-        KeyCode::Char('g') => switch_tab(state, 5, data.tabs.len()),
+        KeyCode::Char('g') => switch_tab(state, 4, data.tabs.len()),
         KeyCode::Up | KeyCode::Char('k') => move_selection(data, state, -1),
         KeyCode::Down | KeyCode::Char('j') => move_selection(data, state, 1),
         KeyCode::PageUp => scroll_content(state, -10),
